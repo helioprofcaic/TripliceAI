@@ -440,6 +440,7 @@ if prompt := st.chat_input("Digite sua pergunta..."):
             secret_key = str(st.secrets.get("GROQ_API_KEY", "")).strip()
             
             groq_key = user_key if user_key else secret_key
+            key_source = "Sidebar (Override)" if user_key else "Secrets"
             
             if not groq_key:
                 st.error("Configure GROQ_API_KEY nos secrets (.streamlit/secrets.toml) ou na barra lateral.")
@@ -461,7 +462,12 @@ if prompt := st.chat_input("Digite sua pergunta..."):
             )
             ai_response = response.choices[0].message.content
         except Exception as e:
-            ai_response = f"Erro na geração de resposta: {str(e)}"
+            error_msg = str(e)
+            if "401" in error_msg:
+                masked_key = f"{groq_key[:4]}...{groq_key[-4:]}" if len(groq_key) > 8 else "Inválida"
+                ai_response = f"❌ **Erro 401: Chave Inválida**\n\nO sistema tentou usar a chave vinda de: **{key_source}**.\nChave detectada: `{masked_key}`\n\n👉 Se a origem for 'Sidebar', apague o campo na barra lateral.\n👉 Se for 'Secrets', verifique o painel do Streamlit Cloud."
+            else:
+                ai_response = f"❌ Erro no fallback Groq: {error_msg}"
 
     # Adicionar resposta da IA
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
