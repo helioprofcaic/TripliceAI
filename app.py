@@ -50,6 +50,8 @@ if "ngrok_url" not in st.session_state:
     st.session_state.ngrok_url = st.secrets.get("TUNNEL_URL", "").replace("/v1", "") if IS_CLOUD else ""
 if "use_ngrok_for_ai" not in st.session_state:
     st.session_state.use_ngrok_for_ai = False
+if "groq_key" not in st.session_state:
+    st.session_state.groq_key = ""
 
 # --- FUNÇÕES SUPABASE ---
 def save_conversation_to_supabase(name: str, conversation_data: dict) -> bool:
@@ -201,6 +203,14 @@ if not IS_CLOUD:
         st.session_state.include_media = st.checkbox("Incluir mídia reproduzindo no contexto", value=st.session_state.include_media)
         st.session_state.english_mode = st.checkbox("Modo Inglês (responder em inglês)", value=st.session_state.get("english_mode", False))
         st.session_state.use_ngrok_for_ai = st.checkbox("Usar Ngrok para IA", value=st.session_state.get("use_ngrok_for_ai", False))
+        
+        st.markdown("---")
+        # Feedback visual sobre a chave no Secrets
+        has_secret = "GROQ_API_KEY" in st.secrets
+        st.caption(f"Chave no Secrets: {'✅ Detectada' if has_secret else '❌ Não detectada'}")
+        
+        # Permite corrigir a chave API diretamente pela interface se o Secrets estiver errado
+        st.session_state.groq_key = st.text_input("Groq API Key (Override):", value=st.session_state.groq_key, type="password", help="Use caso a chave nos secrets esteja inválida")
 
     # --- Ngrok Monitor ---
     with st.sidebar.expander("🌐 Ngrok Monitor"):
@@ -415,14 +425,24 @@ if prompt := st.chat_input("Digite sua pergunta..."):
         )
         ai_response = response.choices[0].message.content
     except Exception as e:
-        st.warning(f"LM Studio indisponível ({str(e)[:100]}...). Usando Groq como fallback.")
+        error_msg = str(e)
+        if "No models loaded" in error_msg:
+            st.warning("⚠️ LM Studio conectado, mas NENHUM modelo carregado. Carregue um modelo na barra verde do LM Studio no seu PC.")
+        else:
+            st.warning(f"LM Studio indisponível ({error_msg[:100]}...). Usando Groq como fallback.")
 
     # Fallback para Groq
     if not ai_response:
         try:
-            groq_key = st.secrets.get("GROQ_API_KEY") or st.session_state.get("groq_key", "")
+            # Prioridade: Input da Sidebar > Secrets (para permitir correção rápida)
+            # Removemos espaços em branco que costumam causar erro 401 ao copiar/colar
+            user_key = st.session_state.get("groq_key", "").strip()
+            secret_key = str(st.secrets.get("GROQ_API_KEY", "")).strip()
+            
+            groq_key = user_key if user_key else secret_key
+            
             if not groq_key:
-                st.error("Configure GROQ_API_KEY nos secrets ou na sidebar.")
+                st.error("Configure GROQ_API_KEY nos secrets (.streamlit/secrets.toml) ou na barra lateral.")
                 st.stop()
             
             client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
