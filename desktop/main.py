@@ -332,7 +332,7 @@ def get_ai_client():
     except:
         pass
     if api_key_groq:
-        return OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key_groq), "llama3-8b-8192"
+        return OpenAI(base_url="https://api.groq.com/openai/v1", api_key=api_key_groq), "llama-3.1-8b-instant"
     return None, None
 
 

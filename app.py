@@ -112,6 +112,14 @@ def load_conversation_from_supabase(conversation_id: str) -> dict:
 # --- 2. BARRA LATERAL (CONEXÃO E NAVEGAÇÃO) ---
 st.sidebar.header("🔌 Conexão & Acesso")
 
+# Seletor de Modo (Simulação para testes)
+modo_simulado = st.sidebar.radio("Ambiente:", ["Auto", "Local", "Cloud"], index=0, horizontal=True, help="Simule o comportamento da nuvem localmente.")
+if modo_simulado == "Cloud":
+    IS_CLOUD = True
+elif modo_simulado == "Local":
+    IS_CLOUD = False
+# Se 'Auto', mantém o valor detectado originalmente na linha 14
+
 # Indicador de modo
 modo = "☁️ Cloud" if IS_CLOUD else "💻 Local"
 st.sidebar.caption(f"Modo: {modo}")
@@ -275,6 +283,9 @@ with st.sidebar.expander("⚙️ Configurações de IA", expanded=True):
     has_secret = "GROQ_API_KEY" in st.secrets
     st.caption(f"Chave no Secrets: {'✅ Detectada' if has_secret else '❌ Não detectada'}")
     
+    # Ajuda para encontrar a chave
+    st.markdown("👉 **[Clique aqui para criar sua chave (Grátis)](https://console.groq.com/keys)**")
+
     # Permite corrigir a chave API diretamente pela interface se o Secrets estiver errado
     st.session_state.groq_key = st.text_input("Groq API Key (Override):", value=st.session_state.groq_key, type="password", help="Use caso a chave nos secrets esteja inválida")
 
@@ -454,21 +465,24 @@ if prompt := st.chat_input("Digite sua pergunta..."):
                 st.error("Configure GROQ_API_KEY nos secrets (.streamlit/secrets.toml) ou na barra lateral.")
                 st.stop()
             
-            client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
-            
-            messages = [{"role": "system", "content": f"Você é um {st.session_state.expert_type}. {'Seja opinativo e direto.' if st.session_state.opinionated else 'Seja prestativo e informativo.'} {'Responda em inglês.' if st.session_state.english_mode else 'Responda em português brasileiro.'}"}]
-            messages.extend(st.session_state.messages[-10:])
-            
-            if context:
-                messages.insert(1, {"role": "system", "content": context})
+            if not groq_key.startswith("gsk_"):
+                ai_response = f"❌ **Erro de Configuração**: A chave detectada em `{key_source}` ({groq_key[:5]}...) não parece ser uma chave válida da Groq (deve começar com `gsk_`).\n\nVerifique se você não colocou o **Authtoken do Ngrok** no lugar da **API Key da Groq**."
+            else:
+                client = OpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
+                
+                messages = [{"role": "system", "content": f"Você é um {st.session_state.expert_type}. {'Seja opinativo e direto.' if st.session_state.opinionated else 'Seja prestativo e informativo.'} {'Responda em inglês.' if st.session_state.english_mode else 'Responda em português brasileiro.'}"}]
+                messages.extend(st.session_state.messages[-10:])
+                
+                if context:
+                    messages.insert(1, {"role": "system", "content": context})
 
-            response = client.chat.completions.create(
-                model="llama3-8b-8192",
-                messages=messages,
-                temperature=0.7,
-                max_tokens=2048
-            )
-            ai_response = response.choices[0].message.content
+                response = client.chat.completions.create(
+                    model="llama-3.1-8b-instant",
+                    messages=messages,
+                    temperature=0.7,
+                    max_tokens=2048
+                )
+                ai_response = response.choices[0].message.content
         except Exception as e:
             error_msg = str(e)
             if "401" in error_msg:
