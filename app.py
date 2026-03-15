@@ -10,7 +10,7 @@ from supabase import create_client, Client
 
 # --- 1. CONFIGURAÇÃO E AMBIENTE ---
 # Detecção robusta: Verifica override nos secrets, usuário padrão 'appuser' ou hostname típico do Cloud
-IS_CLOUD = st.secrets.get("IS_CLOUD", False) or os.environ.get("USER") == "appuser" or os.environ.get("HOSTNAME", "").startswith("streamlit")
+IS_CLOUD = st.secrets.get("IS_CLOUD", False) or os.environ.get("USER") in ["appuser", "adminuser"] or os.environ.get("HOSTNAME", "").startswith("streamlit")
 
 # Inicializar Supabase
 supabase: Client = None
