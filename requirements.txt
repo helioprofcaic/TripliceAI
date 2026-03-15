@@ -1,0 +1,7 @@
+streamlit
+openai
+requests
+qrcode[pil]
+PyQt6
+PyQt6-WebEngine
+supabase

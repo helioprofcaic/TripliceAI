@@ -1,0 +1,2 @@
+# Esta pasta contém configurações do Streamlit
+# O arquivo secrets.toml é ignorado pelo .gitignore por conter dados sensíveis
