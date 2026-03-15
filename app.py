@@ -194,7 +194,43 @@ if not IS_CLOUD:
             try:
                 response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=5)
                 if response.status_code == 200:
-                    # ... (código do monitor Ngrok, que permanece apenas local)
+                    data = response.json()
+                    tunnels = data.get("tunnels", [])
+                    if tunnels:
+                        st.write("**Túneis Ativos:**")
+                        for tunnel in tunnels:
+                            st.write(f"**Nome:** {tunnel.get('name', 'N/A')}")
+                            st.write(f"**URL Pública:** {tunnel.get('public_url', 'N/A')}")
+                            st.write(f"**Protocolo:** {tunnel.get('proto', 'N/A')}")
+                            st.write(f"**URL Local:** {tunnel.get('config', {}).get('addr', 'N/A')}")
+                            
+                            # Metrics
+                            metrics = tunnel.get('metrics', {})
+                            conns = metrics.get('conns', {})
+                            http = metrics.get('http', {})
+                            
+                            st.write("**Métricas de Conexões:**")
+                            st.write(f"- Total: {conns.get('count', 0)} | Abertas: {conns.get('gauge', 0)}")
+                            st.write(f"- Taxa (/s): 1m: {conns.get('rate1', 0):.2f} | 5m: {conns.get('rate5', 0):.2f} | 15m: {conns.get('rate15', 0):.2f}")
+                            st.write(f"- Durações (s) - 50%: {conns.get('p50', 0):.2f} | 90%: {conns.get('p90', 0):.2f} | 95%: {conns.get('p95', 0):.2f} | 99%: {conns.get('p99', 0):.2f}")
+                            
+                            st.write("**Métricas HTTP:**")
+                            st.write(f"- Total de Requisições: {http.get('count', 0)}")
+                            st.write(f"- Taxa (/s): 1m: {http.get('rate1', 0):.2f} | 5m: {http.get('rate5', 0):.2f} | 15m: {http.get('rate15', 0):.2f}")
+                            st.write(f"- Durações (s) - 50%: {http.get('p50', 0):.2f} | 90%: {http.get('p90', 0):.2f} | 95%: {conns.get('p95', 0):.2f} | 99%: {conns.get('p99', 0):.2f}")
+                            
+                            st.write("---")
+                        # Auto-detect tunnel for the app (port 8501)
+                        app_tunnel = next((t for t in tunnels if '8501' in t.get('config', {}).get('addr', '')), None)
+                        if app_tunnel:
+                            st.session_state.ngrok_url = app_tunnel['public_url']
+                            st.success(f"Ngrok detectado para o app: {app_tunnel['public_url']}")
+                            # Rerun para atualizar o campo de texto e o QR Code
+                            st.rerun()
+                        else:
+                            st.info("Nenhum túnel encontrado para o app (porta 8501).")
+                    else:
+                        st.write("Nenhum túnel ativo encontrado.")
                 else:
                     st.error(f"Erro na API do Ngrok: {response.status_code}")
             except requests.exceptions.RequestException:
