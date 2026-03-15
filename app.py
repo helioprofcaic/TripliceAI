@@ -271,7 +271,7 @@ with st.sidebar.expander("🤖 LM Studio Monitor"):
         try:
             base_url = tunel_url.rstrip('/')
             if not base_url.endswith('/v1'): base_url += '/v1'
-            response = requests.get(f"{base_url}/models", timeout=5)
+            response = requests.get(f"{base_url}/models", timeout=5, headers={"ngrok-skip-browser-warning": "true"})
             if response.status_code == 200:
                 data = response.json()
                 models = data.get("data", [])
@@ -400,7 +400,11 @@ if prompt := st.chat_input("Digite sua pergunta..."):
     # Tentar LM Studio primeiro
     ai_response = None
     try:
-        client = OpenAI(base_url=tunel_url, api_key="lm-studio")
+        # Garante formatação correta da URL e headers para passar pelo aviso do Ngrok
+        lm_url = tunel_url.rstrip('/')
+        if not lm_url.endswith('/v1'): lm_url += '/v1'
+        
+        client = OpenAI(base_url=lm_url, api_key="lm-studio", default_headers={"ngrok-skip-browser-warning": "true"})
         
         messages = [{"role": "system", "content": f"Você é um {st.session_state.expert_type}. {'Seja opinativo e direto.' if st.session_state.opinionated else 'Seja prestativo e informativo.'} {'Responda em inglês.' if st.session_state.english_mode else 'Responda em português brasileiro.'}"}]
         messages.extend(st.session_state.messages[-10:])  # Últimas 10 mensagens
