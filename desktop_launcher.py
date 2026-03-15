@@ -60,119 +60,41 @@ thread = threading.Thread(target=run_streamlit, daemon=True)
 thread.start()
 
 if has_tunnel_url:
-    print(f"TUNNEL_URL detectado em .streamlit/secrets.toml: {tunnel_url}")
-    if lm_studio_url:
-        print("TUNNEL_URL parece ser endpoint LM Studio (/v1); será usado para IA.")
-        # Inicia ngrok com domínio customizado para o app
-        base_url = tunnel_url.replace("/v1", "")
-        print(f"Iniciando ngrok com domínio customizado: {base_url}")
-        
-        def is_ngrok_running() -> bool:
-            try:
-                import subprocess as _sub
-                result = _sub.run([
-                    "tasklist", "/FI", "IMAGENAME eq ngrok.exe", "/NH"
-                ], capture_output=True, text=True, check=False)
-                if "ngrok.exe" in result.stdout:
-                    return True
-            except Exception:
-                pass
-            try:
-                import socket
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
-                result = sock.connect_ex(("127.0.0.1", 4040))
-                sock.close()
-                return result == 0
-            except Exception:
-                return False
+    base_url = tunnel_url.replace("/v1", "")
+    print(f"✅ TUNNEL_URL detectado: {base_url}")
+    print("Verificando se o túnel já está ativo localmente...")
 
-        # Para o domínio customizado, verifica se já existe túnel ativo
-        base_url = tunnel_url.replace("/v1", "")
-        print(f"Verificando se túnel já existe para: {base_url}")
-        
-        def is_ngrok_running() -> bool:
-            try:
-                import subprocess as _sub
-                result = _sub.run([
-                    "tasklist", "/FI", "IMAGENAME eq ngrok.exe", "/NH"
-                ], capture_output=True, text=True, check=False)
-                if "ngrok.exe" in result.stdout:
-                    return True
-            except Exception:
-                pass
-            try:
-                import socket
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(1)
-                result = sock.connect_ex(("127.0.0.1", 4040))
-                sock.close()
-                return result == 0
-            except Exception:
-                return False
+    tunnel_is_active = False
+    try:
+        # Verifica se o agente ngrok local já está servindo este túnel
+        response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=2)
+        if response.status_code == 200:
+            tunnels = response.json().get("tunnels", [])
+            for t in tunnels:
+                if t.get("public_url") == base_url:
+                    print(f"✅ Túnel já está sendo gerenciado pelo agente local.")
+                    tunnel_is_active = True
+                    break
+    except requests.exceptions.RequestException:
+        print("ℹ️ Agente Ngrok não está rodando. Será iniciado.")
 
-        tunnel_exists = False
-        if is_ngrok_running():
-            try:
-                import requests
-                response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    tunnels = data.get("tunnels", [])
-                    for tunnel in tunnels:
-                        if tunnel.get('public_url') == base_url:
-                            print(f"Túnel já ativo: {base_url}")
-                            tunnel_exists = True
-                            break
-            except Exception as e:
-                print(f"Erro ao verificar túneis existentes: {e}")
-
-        if not tunnel_exists:
-            print("Túnel não encontrado localmente. Parando ngrok existente e iniciando novo...")
-            if is_ngrok_running():
-                try:
-                    # Tenta parar túnel via API
-                    import requests
-                    response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=5)
-                    if response.status_code == 200:
-                        data = response.json()
-                        tunnels = data.get("tunnels", [])
-                        for tunnel in tunnels:
-                            tunnel_name = tunnel.get('name')
-                            if tunnel_name:
-                                print(f"Parando túnel: {tunnel_name}")
-                                requests.delete(f"http://127.0.0.1:4040/api/tunnels/{tunnel_name}", timeout=5)
-                    # Para o processo
-                    subprocess.run(["taskkill", "/F", "/IM", "ngrok.exe"], check=False)
-                    time.sleep(2)
-                except Exception as e:
-                    print(f"Erro ao parar ngrok: {e}")
-
-            try:
-                ngrok_thread = threading.Thread(
-                    target=lambda: subprocess.Popen(["ngrok", "http", "8501", "--url", base_url]),
-                    daemon=True
-                )
-                ngrok_thread.start()
-                time.sleep(2)
-            except Exception as e:
-                print(f"Falha ao iniciar ngrok com domínio customizado: {e}")
-                print("Tentando iniciar ngrok com túnel aleatório...")
-                try:
-                    ngrok_thread = threading.Thread(
-                        target=lambda: subprocess.Popen(["ngrok", "http", "8501"]),
-                        daemon=True
-                    )
-                    ngrok_thread.start()
-                    time.sleep(2)
-                    base_url = None  # Será detectado depois
-                except Exception as e2:
-                    print(f"Falha também no túnel aleatório: {e2}")
-                    print("Certifique-se de que ngrok está instalado e configurado.")
-                    base_url = None  # Fallback
-        # Se túnel existe, usa base_url
-    else:
-        base_url = tunnel_url
+    if not tunnel_is_active:
+        print("Iniciando novo processo ngrok para o domínio estático...")
+        print("Se receber o erro 'ERR_NGROK_334', significa que o túnel já está online.")
+        print("Nesse caso, pare qualquer outro processo 'ngrok.exe' e tente novamente em um minuto.")
+        try:
+            hostname = base_url.replace("https://", "").replace("http://", "")
+            # O comando correto para domínios estáticos é --hostname
+            ngrok_thread = threading.Thread(
+                target=lambda: subprocess.Popen(["ngrok", "http", "8501", "--hostname", hostname]),
+                daemon=True
+            )
+            ngrok_thread.start()
+            time.sleep(3)  # Aguarda ngrok iniciar
+        except Exception as e:
+            print(f"❌ Falha ao iniciar ngrok: {e}")
+            print("Certifique-se de que 'ngrok' está instalado e no PATH do sistema.")
+            base_url = "http://localhost:8501" # Fallback para localhost
 else:
     base_url = None
 
@@ -180,18 +102,6 @@ else:
 if not has_tunnel_url:
     # Sempre verifica e inicia ngrok se necessário (para túnel público do app)
     def is_ngrok_running() -> bool:
-        # 1) Favorável: checar processo ngrok no Windows
-        try:
-            import subprocess as _sub
-            result = _sub.run([
-                "tasklist", "/FI", "IMAGENAME eq ngrok.exe", "/NH"
-            ], capture_output=True, text=True, check=False)
-            if "ngrok.exe" in result.stdout:
-                return True
-        except Exception:
-            pass
-
-        # 2) Fallback: checar se porta 4040 está respondendo
         try:
             import socket
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -204,6 +114,7 @@ if not has_tunnel_url:
 
     # Inicia o Ngrok apenas se não estiver rodando
     if not is_ngrok_running():
+        print("ℹ️ TUNNEL_URL não encontrado. Iniciando ngrok com túnel aleatório...")
         try:
             ngrok_thread = threading.Thread(
                 target=lambda: subprocess.Popen(["ngrok", "http", "8501"]),
@@ -211,11 +122,11 @@ if not has_tunnel_url:
             )
             ngrok_thread.start()
             time.sleep(2)  # Aguarda ngrok iniciar
-        except Exception as e:
-            print(f"Falha ao iniciar ngrok: {e}")
+        except FileNotFoundError:
+            print("❌ Erro: 'ngrok' não encontrado. Certifique-se de que está instalado e no PATH.")
+            base_url = "http://localhost:8501"
 
     # Aguarda o servidor iniciar
-    time.sleep(8)
 
     # Tenta detectar o túnel público do ngrok
     ngrok_public_url = None
@@ -250,43 +161,10 @@ if not has_tunnel_url:
         base_url = ngrok_public_url
 else:
     # Aguarda o servidor iniciar
-    time.sleep(8)
+    time.sleep(5)
     
     # Para domínio customizado, se base_url definido, usa ele; senão detecta
-    if base_url:
-        print(f"Usando domínio customizado: {base_url}")
-    else:
-        # Detecta túnel aleatório
-        ngrok_public_url = None
-        max_attempts = 5
-        for attempt in range(max_attempts):
-            try:
-                import requests
-                response = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=5)
-                if response.status_code == 200:
-                    data = response.json()
-                    tunnels = data.get("tunnels", [])
-                    app_tunnel = next((t for t in tunnels if '8501' in t.get('config', {}).get('addr', '')), None)
-                    if app_tunnel:
-                        ngrok_public_url = app_tunnel['public_url']
-                        print(f"Túnel ngrok detectado: {ngrok_public_url}")
-                        break
-                    else:
-                        print(f"Tentativa {attempt + 1}: Nenhum túnel encontrado para a porta 8501.")
-                else:
-                    print(f"Tentativa {attempt + 1}: Erro ao consultar API do ngrok: {response.status_code}")
-            except Exception as e:
-                print(f"Tentativa {attempt + 1}: Falha ao detectar túnel ngrok: {e}")
-            
-            if attempt < max_attempts - 1:
-                print("Aguardando mais tempo para ngrok iniciar...")
-                time.sleep(3)
-
-        if not ngrok_public_url:
-            print("Não foi possível detectar o túnel ngrok. Abrindo em localhost.")
-            base_url = "http://localhost:8501"
-        else:
-            base_url = ngrok_public_url
+    print(f"Usando URL do túnel: {base_url}")
 
 try:
     # Cria a aplicação Qt

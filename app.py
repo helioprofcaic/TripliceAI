@@ -117,7 +117,20 @@ modo = "☁️ Cloud" if IS_CLOUD else "💻 Local"
 st.sidebar.caption(f"Modo: {modo}")
 
 if not IS_CLOUD:
-    tunel_url = st.sidebar.text_input("Endereço LM Studio:", "http://localhost:1234/v1")
+    # Detecção automática: Procura túnel Ngrok apontando para porta 1234 (LM Studio)
+    default_lm_url = "http://localhost:1234/v1"
+    try:
+        # Timeout curto para não travar a UI se a API do Ngrok não estiver respondendo
+        r = requests.get("http://127.0.0.1:4040/api/tunnels", timeout=0.2)
+        if r.status_code == 200:
+            tunnels = r.json().get("tunnels", [])
+            lm_tunnel = next((t for t in tunnels if "1234" in t.get("config", {}).get("addr", "")), None)
+            if lm_tunnel:
+                default_lm_url = f"{lm_tunnel['public_url']}/v1"
+    except:
+        pass
+    
+    tunel_url = st.sidebar.text_input("Endereço LM Studio:", default_lm_url)
     ngrok_url = st.sidebar.text_input("URL Pública Ngrok (Opcional):", value=st.session_state.ngrok_url, key="ngrok_url")
     if ngrok_url:
         qr = qrcode.make(ngrok_url)
